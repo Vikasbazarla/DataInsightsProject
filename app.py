@@ -1,64 +1,46 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-from openai import OpenAI
+import seaborn as sns
 
-# Set page config
-st.set_page_config(page_title="AI Data Insights", layout="wide")
+st.set_page_config(page_title="CSV Data Insights", layout="wide")
+st.title("📊 CSV Data Analysis Dashboard")
 
-# Load OpenAI API key from Streamlit secrets
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-# Title
-st.title("📊 Data Insights with AI 🔍")
-
-# Upload CSV
-uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
+uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
 
 if uploaded_file is not None:
-    # Read CSV
+    # Load CSV
     df = pd.read_csv(uploaded_file)
-    
-    # Display Data
-    st.subheader("🔍 Data Preview")
-    st.dataframe(df)
+    st.success("File uploaded successfully!")
 
-    # Summary Statistics
-    st.subheader("📈 Summary Statistics")
+    # Show basic details
+    st.subheader("🔍 Dataset Preview")
+    st.dataframe(df.head())
+
+    st.subheader("🧮 Summary Statistics")
     st.write(df.describe())
 
-    # Plotting
-    st.subheader("📉 Histogram")
-    numeric_cols = df.select_dtypes(include='number').columns.tolist()
+    st.subheader("📈 Null Values Heatmap")
+    fig1, ax1 = plt.subplots()
+    sns.heatmap(df.isnull(), cbar=False, cmap="viridis", ax=ax1)
+    st.pyplot(fig1)
 
-    if numeric_cols:
-        col_to_plot = st.selectbox("Choose a numeric column to plot", numeric_cols)
-        fig, ax = plt.subplots()
-        ax.hist(df[col_to_plot].dropna(), bins=20, color='lightblue', edgecolor='black')
-        ax.set_title(f"Histogram of {col_to_plot}")
-        st.pyplot(fig)
+    st.subheader("📊 Correlation Matrix")
+    numeric_df = df.select_dtypes(include=["number"])
+    if not numeric_df.empty:
+        fig2, ax2 = plt.subplots()
+        sns.heatmap(numeric_df.corr(), annot=True, cmap="coolwarm", ax=ax2)
+        st.pyplot(fig2)
     else:
-        st.warning("No numeric columns available to plot.")
+        st.warning("No numeric columns found for correlation heatmap.")
 
-    # AI Insights
-    st.subheader("🧠 AI Insights")
+    st.subheader("📌 Column-wise Distributions")
+    for col in numeric_df.columns:
+        fig3, ax3 = plt.subplots()
+        sns.histplot(df[col], kde=True, ax=ax3)
+        ax3.set_title(f'Distribution of {col}')
+        st.pyplot(fig3)
 
-    prompt = f"""
-    Analyze this data table and give meaningful insights, patterns, or anomalies in bullet points.
+else:
+    st.info("Please upload a CSV file to get started.")
 
-    {df.head(10).to_string(index=False)}
-    """
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You are a professional data analyst."},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        ai_reply = response.choices[0].message.content
-        st.markdown(ai_reply)
-    except Exception as e:
-        st.error("Something went wrong while generating insights.")
-        st.exception(e)
