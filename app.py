@@ -3,61 +3,62 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from openai import OpenAI
 
-# Set Streamlit page config
+# Set page config
 st.set_page_config(page_title="AI Data Insights", layout="wide")
-st.title("📊 AI-Powered Data Insights")
-st.write("Upload a CSV file and let OpenAI generate insights automatically.")
 
-# File upload
-uploaded_file = st.file_uploader("Upload your CSV file", type=["csv"])
+# Load OpenAI API key from Streamlit secrets
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+
+# Title
+st.title("📊 Data Insights with AI 🔍")
+
+# Upload CSV
+uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
 
 if uploaded_file is not None:
+    # Read CSV
     df = pd.read_csv(uploaded_file)
     
-    st.subheader("📌 Preview of Your Data")
-    st.dataframe(df.head())
+    # Display Data
+    st.subheader("🔍 Data Preview")
+    st.dataframe(df)
 
-    # Show basic summary
+    # Summary Statistics
     st.subheader("📈 Summary Statistics")
     st.write(df.describe())
 
-    # Prepare data for AI prompt
-    sample_data = df.head(10).to_string()
+    # Plotting
+    st.subheader("📉 Histogram")
+    numeric_cols = df.select_dtypes(include='number').columns.tolist()
 
-    # Generate AI insights
-    st.subheader("🤖 AI-Generated Insights")
-
-    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-
-    prompt = f"""You are a data analyst. Analyze the following data table and provide useful, easy-to-understand insights.
-    
-    Data:
-    {sample_data}
-    
-    Return your response as bullet points."""
-
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "system", "content": "You are a helpful AI data analyst."},
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    ai_reply = response.choices[0].message.content
-    st.markdown(ai_reply)
-
-    # Optional: Plot if numeric columns exist
-    numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
-    if len(numeric_cols) >= 2:
-        st.subheader("📊 Data Plot")
-        col1 = st.selectbox("Choose X-axis", numeric_cols)
-        col2 = st.selectbox("Choose Y-axis", numeric_cols, index=1 if len(numeric_cols) > 1 else 0)
-
+    if numeric_cols:
+        col_to_plot = st.selectbox("Choose a numeric column to plot", numeric_cols)
         fig, ax = plt.subplots()
-        ax.scatter(df[col1], df[col2])
-        ax.set_xlabel(col1)
-        ax.set_ylabel(col2)
-        ax.set_title(f"{col1} vs {col2}")
+        ax.hist(df[col_to_plot].dropna(), bins=20, color='lightblue', edgecolor='black')
+        ax.set_title(f"Histogram of {col_to_plot}")
         st.pyplot(fig)
+    else:
+        st.warning("No numeric columns available to plot.")
 
+    # AI Insights
+    st.subheader("🧠 AI Insights")
+
+    prompt = f"""
+    Analyze this data table and give meaningful insights, patterns, or anomalies in bullet points.
+
+    {df.head(10).to_string(index=False)}
+    """
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You are a professional data analyst."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        ai_reply = response.choices[0].message.content
+        st.markdown(ai_reply)
+    except Exception as e:
+        st.error("Something went wrong while generating insights.")
+        st.exception(e)
